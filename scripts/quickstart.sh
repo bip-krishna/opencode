@@ -92,6 +92,46 @@ if command -v opencode &>/dev/null; then
 fi
 
 echo ""
-echo -e "${GREEN}All set!${NC} Run ${MUTED}opencode${NC} and ask about the NITC wiki."
-echo -e "To edit pages, add your bot password to: ${MUTED}$WIKI_CONFIG${NC}"
+
+# 6. Prompt for bot credentials
+echo -e "${MUTED}To edit wiki pages, you need a bot password from${NC}"
+echo -e "${MUTED}  https://wiki.fosscell.org/Special:BotPasswords${NC}"
 echo ""
+read -r -p "Set up bot credentials now? (y/n): " SETUP_BOT
+if [ "$SETUP_BOT" = "y" ] || [ "$SETUP_BOT" = "Y" ]; then
+  read -r -p "  Bot username: " BOT_USER
+  echo -n "  Bot password: "
+  stty -echo 2>/dev/null
+  read -r BOT_PASS
+  stty echo 2>/dev/null
+  echo ""
+
+  # Write credentials into the wiki config (via env var to avoid leaking in ps)
+  export WIKI_BOT_USER="$BOT_USER"
+  export WIKI_BOT_PASS="$BOT_PASS"
+  if command -v python3 &>/dev/null; then
+    python3 -c "
+import json, os
+path = '$WIKI_CONFIG'
+with open(path) as f: cfg = json.load(f)
+cfg['wikis']['wiki.fosscell.org']['username'] = os.environ['WIKI_BOT_USER']
+cfg['wikis']['wiki.fosscell.org']['password'] = os.environ['WIKI_BOT_PASS']
+with open(path, 'w') as f: json.dump(cfg, f, indent=2)
+" && echo -e "  ${GREEN}✓${NC} Bot credentials saved"
+  elif command -v node &>/dev/null; then
+    node -e "
+const fs = require('fs');
+const cfg = JSON.parse(fs.readFileSync('$WIKI_CONFIG', 'utf8'));
+cfg.wikis['wiki.fosscell.org'].username = process.env.WIKI_BOT_USER;
+cfg.wikis['wiki.fosscell.org'].password = process.env.WIKI_BOT_PASS;
+fs.writeFileSync('$WIKI_CONFIG', JSON.stringify(cfg, null, 2));
+" && echo -e "  ${GREEN}✓${NC} Bot credentials saved"
+  else
+    echo -e "  ${YELLOW}⚠${NC} Could not save (python3/node required)."
+    echo -e "  Add them manually to: ${MUTED}$WIKI_CONFIG${NC}"
+  fi
+  unset WIKI_BOT_USER WIKI_BOT_PASS
+fi
+
+echo ""
+echo -e "${GREEN}Done!${NC} Run ${MUTED}opencode${NC} and start asking about the NITC wiki."
