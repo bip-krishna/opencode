@@ -289,6 +289,7 @@ const layer = Layer.effect(
                       environment: {
                         CONFIG: wikiConfigPath,
                         MCP_TRUSTED_HOSTS: "wiki.fosscell.org",
+                        NODE_OPTIONS: "--dns-result-order=ipv4first",
                       },
                     },
                   },

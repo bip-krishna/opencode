@@ -1,48 +1,49 @@
-# Wiki MCP Server — Step by Step
+# NITC Wiki MCP — Step-by-Step
 
-This fork of opencode bundles a [MediaWiki MCP Server](https://github.com/ProfessionalWiki/MediaWiki-MCP-Server) so you can ask questions about the NITC wiki (`wiki.fosscell.org`) and edit pages — all through natural language.
+This fork of opencode bundles a pre-configured [MediaWiki MCP Server](https://github.com/ProfessionalWiki/MediaWiki-MCP-Server) for `wiki.fosscell.org`. It lets you read, search, and edit the NITC wiki directly through opencode agents.
 
 ---
 
 ## How It Works
 
-### 1. The MCP Protocol
-
-[MCP (Model Context Protocol)](https://modelcontextprotocol.io) lets an AI agent (opencode) talk to external tools through a standardized interface. Think of it as a USB port for AI — plug in a server, and the agent gains new capabilities.
+opencode supports MCP (Model Context Protocol) servers — external processes that expose tools the AI agent can call. The MediaWiki MCP Server wraps the MediaWiki API and exposes 26+ tools.
 
 ```
-┌─────────────┐    MCP (stdio)    ┌─────────────────────────┐
-│  opencode   │ ◄──────────────► │  mediawiki-mcp-server   │
-│  (AI agent) │   JSON-RPC 2.0   │  (npx process)          │
-└─────────────┘                   └─────────────────────────┘
-                                           │
-                                    MediaWiki API
-                                    (HTTPS)
-                                           │
-                                    ┌──────┴──────┐
-                                    │ wiki.fosscell.org │
-                                    └─────────────┘
+┌──────────────┐   stdio/JSON-RPC   ┌────────────────────┐   HTTPS   ┌──────────────────┐
+│  opencode     │ ◄────────────────► │ mediawiki-mcp-     │ ◄───────► │ wiki.fosscell.org │
+│  (AI agent)   │   tools/list       │ server (npx)       │           │ (MediaWiki API)   │
+│               │   tools/call       │                    │           │                   │
+└──────────────┘                    └────────────────────┘           └──────────────────┘
 ```
 
-OpenCode spawns the MCP server as a child process (`npx @professional-wiki/mediawiki-mcp-server@0.10.0`). They communicate over stdin/stdout using JSON-RPC 2.0 messages.
+**Flow:**
+1. opencode starts and launches the MediaWiki MCP server as a child process
+2. The MCP server probes the wiki for extensions (SMW, Cargo)
+3. The MCP server announces available tools back to opencode
+4. When you ask a wiki question, opencode calls the matching tool
+5. The MCP server authenticates with your bot password and makes the API call
+6. Results are returned to opencode as structured text
 
-### 2. Configuration Files
+---
 
-Two files control the setup:
+## Configuration Files
 
-#### `~/.config/opencode/opencode.json`
-Tells opencode to launch the MCP server and passes it environment variables:
+### `~/.config/opencode/opencode.json`
+
+The top-level config that registers the MCP server:
 
 ```json
 {
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "wiki.fosscell.org": {
       "type": "local",
       "command": ["npx", "-y", "@professional-wiki/mediawiki-mcp-server@0.10.0"],
       "enabled": true,
       "environment": {
-        "CONFIG": "/Users/me/.config/opencode/wiki-mcp-config.json",
-        "MCP_TRUSTED_HOSTS": "wiki.fosscell.org"
+        "CONFIG": "/Users/you/.config/opencode/wiki-mcp-config.json",
+        "MCP_TRUSTED_HOSTS": "wiki.fosscell.org",
+        "NODE_OPTIONS": "--dns-result-order=ipv4first"
       }
     }
   }
@@ -51,14 +52,14 @@ Tells opencode to launch the MCP server and passes it environment variables:
 
 | Field | Purpose |
 |---|---|
-| `type: "local"` | Run the server as a local child process (not remote) |
-| `command` | How to start the server — `npx -y` downloads & runs without prompting |
-| `enabled: true` | Start the server when opencode launches |
-| `environment.CONFIG` | Path to the wiki connection details |
-| `environment.MCP_TRUSTED_HOSTS` | Bypasses the SSRF guard for NAT64 networks |
+| `command` | Launches the MCP server via `npx` (no global install needed) |
+| `CONFIG` | Path to wiki connection settings |
+| `MCP_TRUSTED_HOSTS` | Bypasses the SSRF guard (needed if DNS resolves to a NAT64 IPv6 address) |
+| `NODE_OPTIONS` | Forces Node.js to prefer IPv4 over IPv6 (avoids slow NAT64 gateways) |
 
-#### `~/.config/opencode/wiki-mcp-config.json`
-Connection details for the wiki:
+### `~/.config/opencode/wiki-mcp-config.json`
+
+The wiki connection settings:
 
 ```json
 {
@@ -68,74 +69,62 @@ Connection details for the wiki:
       "server": "https://wiki.fosscell.org",
       "articlepath": "",
       "scriptpath": "",
-      "username": "MyBot@bot",
-      "password": "…",
+      "username": "YourBot@bot",
+      "password": "your-bot-password",
       "private": false
     }
   }
 }
 ```
 
-| Field | Purpose |
+| Field | Value | Why |
+|---|---|---|
+| `server` | `https://wiki.fosscell.org` | Base URL of the wiki |
+| `articlepath` | `""` (empty) | Pages at root: `/Main_Page` not `/wiki/Main_Page` |
+| `scriptpath` | `""` (empty) | API at `/api.php` not `/w/api.php` |
+| `username` | `BotUsername@bot` | Bot password username (format: `Username@bot`) |
+| `password` | secret | Bot password from wiki's Special:BotPasswords |
+
+---
+
+## Authentication (Bot Passwords)
+
+Write tools (create, edit, delete pages) require authentication.
+
+1. Go to `wiki.fosscell.org` → Special:BotPasswords
+2. Create a new bot with **at minimum** these grants:
+   - `Edit existing pages`
+   - `Create, edit, and move pages`
+   - `Delete pages, revisions, and log entries`
+3. Copy the generated username (format: `YourUser@botname`) and password
+4. Add them to `wiki-mcp-config.json`
+
+The MCP server logs `Login successful: username@https://wiki.fosscell.org/api.php` on each authenticated call.
+
+---
+
+## Available Tools
+
+### Read Tools (no auth needed)
+
+| Tool | Description |
 |---|---|
-| `server` | Wiki base URL |
-| `scriptpath` | Where MediaWiki's `api.php` lives. Empty = at root (`/api.php`) |
-| `username` / `password` | Bot password for authenticated tools |
-| `private: false` | Anonymous read access is allowed |
-
-### 3. Authentication Flow
-
-```
-                  MCP Server                    MediaWiki API
-                       │                             │
-  1. Start server ───► │                             │
-                       ├──► GET /api.php?action=query│
-                       │    &meta=tokens&type=login  │──► Returns login token
-                       │◄─────────────────────────── │
-                       │                             │
-  2. Login ───────────► ├──► POST /api.php           │
-                       │    action=login              │
-                       │    lgname=Bip-krishna@mcp-bot│
-                       │    lgpassword=…              │
-                       │    lgtoken=…                 │
-                       │◄─────────────────────────── │──► Sets auth cookies
-                       │                             │
-  3. Tool call ───────► ├──► POST /api.php           │
-  (e.g. get-page)       │    action=parse             │
-                       │    page=Some_Title           │
-                       │    (cookies attached)        │
-                       │◄─────────────────────────── │──► Returns page content
-                       │                             │
-  4. Result ──────────► opencode
-```
-
-- **Read-only tools** (`get-page`, `search-page`, `get-site-info`, etc.) don't need authentication for public wikis.
-- **Write tools** (`create-page`, `update-page`, etc.) require the bot to log in first using the credentials from `wiki-mcp-config.json`.
-- The bot password must have the appropriate grants (e.g. `Edit existing pages` for `update-page`).
-
-### 4. Available Tools
-
-#### Read Tools (no auth needed)
-
-| Tool | What it does |
-|---|---|
-| `get-page` | Fetch a wiki page (wikitext or HTML) |
-| `get-pages` | Fetch multiple pages at once |
-| `search-page` | Full-text search across the wiki |
-| `search-page-by-prefix` | Title autocomplete |
-| `get-page-history` | Revision history of a page |
-| `get-recent-changes` | Recent wiki activity |
+| `get-page` | Fetch a page's wikitext or HTML |
+| `get-pages` | Batch fetch up to 50 pages |
+| `search-page` | Full-text search across titles and content |
+| `search-page-by-prefix` | Title autocomplete (up to 500 results) |
 | `get-site-info` | Wiki metadata (version, namespaces, extensions) |
-| `get-category-members` | List pages in a category |
-| `get-links-here` | Pages that link to a given page |
+| `get-page-history` | Revision history |
+| `get-recent-changes` | Recent wiki activity |
+| `compare-pages` | Diff two page versions |
+| `parse-wikitext` | Preview wikitext without saving |
 | `get-file` | File metadata and download URLs |
-| `get-revision` | Fetch a specific historical revision |
-| `parse-wikitext` | Render wikitext to HTML without saving |
-| `compare-pages` | Diff two versions of a page |
+| `get-category-members` | List pages in a category |
+| `get-links-here` | Find backlinks and transclusions |
 
-#### Write Tools (require bot auth)
+### Write Tools (require bot password)
 
-| Tool | Required Grant |
+| Tool | Permission needed |
 |---|---|
 | `create-page` | Create, edit, and move pages |
 | `update-page` | Edit existing pages |
@@ -143,64 +132,75 @@ Connection details for the wiki:
 | `delete-page` | Delete pages, revisions, and log entries |
 | `undelete-page` | Delete pages, revisions, and log entries |
 | `upload-file` | Upload new files |
-| `upload-file-from-url` | Upload new files |
 | `update-file` | Upload, replace, and move files |
-| `update-file-from-url` | Upload, replace, and move files |
 
-### 5. Startup Sequence (Detailed)
+### Extension Tools (auto-detected)
 
-When you run `opencode`, this happens:
-
-```
-1. opencode reads ~/.config/opencode/opencode.json
-2. Finds MCP server "wiki.fosscell.org" configured as type: "local"
-3. Spawns: npx -y @professional-wiki/mediawiki-mcp-server@0.10.0
-   with CONFIG env var pointing to wiki-mcp-config.json
-   and MCP_TRUSTED_HOSTS=wiki.fosscell.org
-4. npx downloads the package (first run) or uses npm cache (subsequent runs)
-5. The MCP server starts and:
-   a. Reads wiki-mcp-config.json
-   b. Probes the wiki API for installed extensions (SMW, Cargo, etc.)
-   c. Advertises its tool list to opencode over MCP
-6. opencode's AI now has access to all wiki tools
-7. When you ask a question, opencode calls the appropriate MCP tool
-8. The MCP server translates the request into MediaWiki API calls
-9. Results flow back: wiki → MCP server → opencode → you
-```
-
-### 6. Network Notes
-
-The NITC wiki resolves to a **NAT64 IPv6 address** (`64:ff9b:...`), which the MCP server's built-in SSRF guard considers non-public. The `MCP_TRUSTED_HOSTS` environment variable exempts `wiki.fosscell.org` from this check, allowing the server to connect.
-
-The startup probe for extensions (SMW/Cargo) may still log a warning about the NAT64 address, but this is cosmetic — all read and write tools work normally.
+If the wiki has the Cargo or Semantic MediaWiki extension, additional tools appear (`cargo-query`, `smw-query`, etc.).
 
 ---
 
-## Quick Reference
+## Step-by-Step Test
 
-### One-liner install
+After running the quickstart script, verify the MCP server works:
+
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/bip-krishna/opencode/dev/scripts/quickstart.sh)"
+# 1. Check the MCP server starts
+CONFIG=~/.config/opencode/wiki-mcp-config.json \
+MCP_TRUSTED_HOSTS=wiki.fosscell.org \
+NODE_OPTIONS=--dns-result-order=ipv4first \
+npx -y @professional-wiki/mediawiki-mcp-server@0.10.0 --help
+# You should see startup logs (plaintext credential warnings are normal)
+
+# 2. Test a read tool (send JSON-RPC via stdin)
+echo '{"method":"tools/call","jsonrpc":"2.0","id":1,"params":{"name":"search-page","arguments":{"wiki":"wiki.fosscell.org","query":"FOSSMeet","limit":2}}}' | \
+CONFIG=~/.config/opencode/wiki-mcp-config.json \
+MCP_TRUSTED_HOSTS=wiki.fosscell.org \
+NODE_OPTIONS=--dns-result-order=ipv4first \
+npx -y @professional-wiki/mediawiki-mcp-server@0.10.0 2>/dev/null | grep -o '"text":"[^"]*"' | head -3
+# Returns page titles and snippets
+
+# 3. Run opencode and ask about the wiki
+opencode
+# Then ask: "What pages are on the NITC wiki?"
 ```
 
-### Config file locations
-- `~/.config/opencode/opencode.json` — MCP server registration
-- `~/.config/opencode/wiki-mcp-config.json` — Wiki connection & credentials
-
-### Restart after config changes
-Press `Ctrl+R` in opencode to reload config, or restart opencode entirely.
-
-### Verify the server is running
-Ask opencode: "What tools are available on the wiki?" or "Show me the site info for wiki.fosscell.org".
+First call takes ~10s (cold start: npx downloads + server startup + NAT64 connection). Subsequent calls are faster.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---|---|---|
-| `Tool not found` | Server didn't start | Check `opencode.json` syntax, restart opencode |
-| `Request failed with status code 404` | Wrong `scriptpath` | Set `scriptpath: ""` in `wiki-mcp-config.json` |
-| `Refusing to fetch URL resolving to non-public address` | NAT64 / IPv6 issue | Ensure `MCP_TRUSTED_HOSTS=wiki.fosscell.org` is set |
-| `Invalid username or password` | Wrong bot credentials | Re-run quickstart script or edit `wiki-mcp-config.json` |
-| Write tools not listed | No auth configured | Add `username` / `password` to `wiki-mcp-config.json` |
+### NAT64 / Slow Connections
+
+If your DNS resolves `wiki.fosscell.org` to a `64:ff9b::` NAT64 address, connections may be slow (10-30s per call).
+
+- `NODE_OPTIONS=--dns-result-order=ipv4first` forces Node.js to prefer IPv4
+- `MCP_TRUSTED_HOSTS=wiki.fosscell.org` bypasses the SSRF guard that blocks non-public addresses
+- For the fastest fix, add to `/etc/hosts`: `68.233.115.209 wiki.fosscell.org`
+
+### "Extension probe failed" Warning
+
+This shows at startup but is harmless — it means the server couldn't detect Cargo/SMW extensions. All core read/write tools still work.
+
+### "Tool not found"
+
+The `whoami` tool was added in v0.13.0. This fork pins v0.10.0 for stability. Upgrade by changing the version in `opencode.json`.
+
+### "Request failed with status code 404"
+
+Check `scriptpath` in `wiki-mcp-config.json`. For this wiki it must be `""` (empty string), not `/w`.
+
+### File uploads
+
+`upload-file` and `update-file` need `uploadDirs` configured — see the [MCP server docs](https://github.com/ProfessionalWiki/MediaWiki-MCP-Server/blob/main/docs/configuration.md#upload-directories).
+
+---
+
+## Files in This Fork
+
+| File | Purpose |
+|---|---|
+| `scripts/quickstart.sh` | One-liner install script |
+| `packages/opencode/src/config/config.ts` | Default config generation (creates MCP entry on first run) |
+| `WIKI_MCP.md` | This guide |

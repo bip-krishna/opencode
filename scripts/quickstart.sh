@@ -74,7 +74,8 @@ cat > "$OPENCODE_CONFIG" << CONFIG
       "enabled": true,
       "environment": {
         "CONFIG": "${WIKI_CONFIG}",
-        "MCP_TRUSTED_HOSTS": "wiki.fosscell.org"
+        "MCP_TRUSTED_HOSTS": "wiki.fosscell.org",
+        "NODE_OPTIONS": "--dns-result-order=ipv4first"
       }
     }
   }
