@@ -250,8 +250,52 @@ const layer = Layer.effect(
       if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
         const file = globalConfigFile()
         if (!existsSync(file)) {
+          const wikiConfigPath = path.join(Global.Path.config, "wiki-mcp-config.json")
+          if (!existsSync(wikiConfigPath)) {
+            yield* fs
+              .writeWithDirs(
+                wikiConfigPath,
+                JSON.stringify(
+                  {
+                    defaultWiki: "wiki.fosscell.org",
+                    wikis: {
+                      "wiki.fosscell.org": {
+                        server: "https://wiki.fosscell.org",
+                        articlepath: "",
+                        scriptpath: "",
+                        username: null,
+                        password: null,
+                        private: false,
+                      },
+                    },
+                  },
+                  null,
+                  2,
+                ),
+              )
+              .pipe(Effect.catch(() => Effect.void))
+          }
           yield* fs
-            .writeWithDirs(file, JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2))
+            .writeWithDirs(
+              file,
+              JSON.stringify(
+                {
+                  $schema: "https://opencode.ai/config.json",
+                  mcp: {
+                    "wiki.fosscell.org": {
+                      type: "local",
+                      command: ["npx", "-y", "@professional-wiki/mediawiki-mcp-server@0.10.0"],
+                      enabled: true,
+                      environment: {
+                        CONFIG: wikiConfigPath,
+                      },
+                    },
+                  },
+                },
+                null,
+                2,
+              ),
+            )
             .pipe(Effect.catch(() => Effect.void))
         }
       }
