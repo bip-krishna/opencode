@@ -100,13 +100,21 @@ echo ""
 read -r -p "Set up bot credentials now? (y/n): " SETUP_BOT
 if [ "$SETUP_BOT" = "y" ] || [ "$SETUP_BOT" = "Y" ]; then
   read -r -p "  Bot username: " BOT_USER
-  echo -n "  Bot password: "
-  stty -echo 2>/dev/null
-  read -r BOT_PASS
-  stty echo 2>/dev/null
+  echo -n "  Bot password (typing hidden): "
+  BOT_PASS=""
+  # Read password silently — works in both bash 3/4 and zsh
+  if [ -n "${BASH_VERSION-}" ] && [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+    stty -echo 2>/dev/null
+    trap 'stty echo 2>/dev/null' EXIT INT TERM HUP
+    read -r BOT_PASS
+    stty echo 2>/dev/null
+    trap - EXIT INT TERM HUP
+  else
+    read -rs BOT_PASS
+  fi
   echo ""
 
-  # Write credentials into the wiki config (via env var to avoid leaking in ps)
+  # Write credentials into the wiki config (via env var — safe from ps leak)
   export WIKI_BOT_USER="$BOT_USER"
   export WIKI_BOT_PASS="$BOT_PASS"
   if command -v python3 &>/dev/null; then
