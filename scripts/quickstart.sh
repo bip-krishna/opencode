@@ -144,3 +144,4 @@ fi
 
 echo ""
 echo -e "${GREEN}Done!${NC} Run ${MUTED}opencode${NC} and start asking about the NITC wiki."
+echo -e "See ${MUTED}WIKI_MCP.md${NC} for a step-by-step explanation of how the MCP server works."

@@ -8,6 +8,12 @@
   </a>
 </p>
 <p align="center">The open source AI coding agent.</p>
+
+> **NITC Wiki Fork** — This fork bundles a pre-configured [MediaWiki MCP Server](WIKI_MCP.md) for `wiki.fosscell.org`. Install with the one-liner below or read the [step-by-step guide](WIKI_MCP.md) to understand how it works.
+>
+> ```bash
+> bash -c "$(curl -fsSL https://raw.githubusercontent.com/bip-krishna/opencode/dev/scripts/quickstart.sh)"
+> ```
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
