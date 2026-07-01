@@ -73,7 +73,8 @@ cat > "$OPENCODE_CONFIG" << CONFIG
       "command": ["npx", "-y", "@professional-wiki/mediawiki-mcp-server@0.10.0"],
       "enabled": true,
       "environment": {
-        "CONFIG": "${WIKI_CONFIG}"
+        "CONFIG": "${WIKI_CONFIG}",
+        "NODE_OPTIONS": "--dns-result-order=ipv4first"
       }
     }
   }
