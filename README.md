@@ -7,7 +7,9 @@
     </picture>
   </a>
 </p>
-<p align="center">The open source AI coding agent — pre-configured for the NITC wiki.</p>
+<p align="center"><strong>OpenCode configured for the NITC Wiki</strong></p>
+
+[Wiki setup](WIKI_MCP.md) · [OpenCode documentation](https://opencode.ai/docs) · [Upstream repository](https://github.com/anomalyco/opencode)
 
 > **NITC Wiki Fork** — This fork bundles a [MediaWiki MCP Server](WIKI_MCP.md) for `wiki.fosscell.org` so you can read, search, and edit the wiki through opencode.
 >
